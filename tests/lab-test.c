@@ -52,8 +52,7 @@ static inline cidr_t make_cidr(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8
  * @brief Helper to construct a route_t struct.
  */
 static inline route_t * make_route(cidr_t dest, uint32_t gateway, const char *dev) {
-  // GCOVR_EXCL_START
-  route_t *r = (route_t *)malloc(sizeof(route_t)); //GCOVR_EXCL_STOP
+  route_t *r = (route_t *)malloc(sizeof(route_t));
   r->dest = dest;
   r->gateway = gateway;
   if (dev) {
@@ -184,6 +183,8 @@ void ip_format_functionality_test(void) {
   ip_format(0xFFFFFFFF, returnIP);
   TEST_ASSERT_EQUAL_STRING("255.255.255.255", returnIP);
 
+  ip_format(0, NULL); // Make sure it doesn't error out
+
   free(returnIP);
 }
 
@@ -205,9 +206,10 @@ void cidr_parse_functionality_test(void) {
   const char * badCIDRText = "192.168.1.1/024";
   const char * invalidFormatText = "This should fail";
   
-  const char * mustRejectCIDRs[10] = {
+  const char * mustRejectCIDRs[12] = {
     "1.2.3.4x",     "1.2.3.4/33",   "1.2.3.4/024",  "1.2.3.4/",     "1.2.3/24",
-    "1.2.3",        "1.2.3.4.5",    "1..2.3",       "256.1.1.1",    "010.0.0.1"
+    "1.2.3",        "1.2.3.4.5",    "1..2.3",       "256.1.1.1",    "010.0.0.1", 
+    "1.2.3.4/x",    "01.2.3.4/24"
   };
   cidr_t * actualCIDR = (cidr_t *)malloc(sizeof(cidr_t));
   if(!actualCIDR) {
@@ -238,7 +240,7 @@ void cidr_parse_functionality_test(void) {
   TEST_ASSERT_EQUAL_UINT8(expPrefix, actualCIDR->prefix); 
 
   //Invalid Cases: Ones to check from Canvas Assignment
-  for(int i = 0; i < 10; i++) {
+  for(int i = 0; i < 12; i++) {
     returnStatus = cidr_parse(mustRejectCIDRs[i], actualCIDR);
     TEST_ASSERT_FALSE(returnStatus);
     // actualCIDR should be unchanged
@@ -297,6 +299,8 @@ void cidr_format_functionality_test(void) {
   const cidr_t zeroCIDR = {0, 0};
   cidr_format(zeroCIDR, returnIP);
   TEST_ASSERT_EQUAL_STRING("0.0.0.0/0", returnIP);
+
+  cidr_format(zeroCIDR, NULL); //Error check
 }
 
 //--------------------------------//
@@ -670,13 +674,18 @@ void route_parse_functionality_test(void) {
   TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 indirectly eth1", r));
 
   // 5. Invalid device: empty or too long (>= DEV_NAME_LEN chars)
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8", r));
   TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct", r));
   TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct 1234567890123456", r));
+  // Overload token
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct 123456788912345678912345678912345678912345678912345678912345678912", r));
 
   // 6. Extra fields / comments not stripped by route_parse
   TEST_ASSERT_FALSE(route_parse("default direct eth0 extra", r));
   TEST_ASSERT_FALSE(route_parse("default direct eth0 # comment", r));
   TEST_ASSERT_FALSE(route_parse("", r));
+
+
 
   free(sentinel);
 }
@@ -832,6 +841,64 @@ void table_load_functionality_test(void) {
   f = create_temp_file(bad_content);
   TEST_ASSERT_NOT_NULL(f);
   TEST_ASSERT_FALSE(table_load(table, f, NULL));
+
+  fclose(f);
+  table_destroy(table);
+
+  // Overload buffer in table_read_line (> 128 characters to trigger realloc)
+  char long_content[512];
+  snprintf(long_content, sizeof(long_content),
+           "default direct eth0 # %-300s\n10.0.0.0/8 direct eth1\n",
+           "extra long comment to overload line buffer");
+  fwd_table_t *long_table = table_create();
+  FILE *long_f = create_temp_file(long_content);
+  TEST_ASSERT_NOT_NULL(long_f);
+  size_t long_bad = 0;
+  TEST_ASSERT_TRUE(table_load(long_table, long_f, &long_bad));
+  TEST_ASSERT_EQUAL_size_t(2, table_count(long_table));
+  fclose(long_f);
+  table_destroy(long_table);
+
+  // Test lines with leading whitespace/whitespace-only and duplicate route in table_add
+  const char *dup_content =
+    "   # leading whitespace comment\n"
+    "   \t   \n"
+    "10.0.0.0/8 direct eth1\n"
+    "10.0.0.0/8 direct eth2\n"; // Duplicate destination fails table_add on line 4
+
+  table = table_create();
+  f = create_temp_file(dup_content);
+  TEST_ASSERT_NOT_NULL(f);
+  bad_line = 0;
+  TEST_ASSERT_FALSE(table_load(table, f, &bad_line));
+  TEST_ASSERT_EQUAL_size_t(4, bad_line);
+  TEST_ASSERT_EQUAL_size_t(1, table_count(table));
+  fclose(f);
+  table_destroy(table);
+
+  // Duplicate route with NULL bad_line
+  table = table_create();
+  f = create_temp_file(dup_content);
+  TEST_ASSERT_NOT_NULL(f);
+  TEST_ASSERT_FALSE(table_load(table, f, NULL));
+  fclose(f);
+  table_destroy(table);
+
+  // File with oneline comment
+  const char *content =
+    "# Line 1: comment\n"
+    "default 132.178.227.1 eno1\n"
+    "10.0.0.0/8 direct eth1\n"
+    "# Should be no issue\n"
+    "10.1.0.0/16 direct eth1\n";
+
+  table = table_create();
+  f = create_temp_file(content);
+  TEST_ASSERT_NOT_NULL(f);
+  bad_line = 0;
+  TEST_ASSERT_TRUE(table_load(table, f, &bad_line));
+  // Routes before line 4 stay in the table!
+  TEST_ASSERT_EQUAL_size_t(3, table_count(table));
   fclose(f);
   table_destroy(table);
 }

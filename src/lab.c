@@ -135,9 +135,6 @@ bool cidr_parse(const char *text, cidr_t *block) {
   }
 
   size_t plen = strlen(prefix_str);
-  if (plen > 2) {
-    return false;
-  }
   if (plen > 1 && prefix_str[0] == '0') {
     return false; // Leading zero (e.g. /024)
   }
@@ -474,8 +471,9 @@ bool route_parse(const char *line, route_t *route) {
 fwd_table_t *table_create(void) {
   fwd_table_t *table = (fwd_table_t *)malloc(sizeof(fwd_table_t));
   if (!table) {
+    // GCOVR_EXCL_START
     return NULL;
-  }
+  } // GCOVR_EXCL_STOP
   table->routes = NULL;
   table->count = 0;
   table->capacity = 0;
@@ -528,8 +526,9 @@ bool table_add(fwd_table_t *table, const route_t *route) {
     size_t new_cap = table->capacity == 0 ? 8 : table->capacity * 2;
     route_t *new_routes = (route_t *)realloc(table->routes, new_cap * sizeof(route_t));
     if (!new_routes) {
+      // GCOVR_EXCL_START
       return false;
-    }
+    } // GCOVR_EXCL_STOP
     table->routes = new_routes;
     table->capacity = new_cap;
   }
@@ -550,8 +549,9 @@ static char *table_read_line(FILE *in) {
   size_t len = 0;
   char *buf = (char *)malloc(cap);
   if (!buf) {
+    // GCOVR_EXCL_START
     return NULL;
-  }
+  } // GCOVR_EXCL_STOP
 
   int c = fgetc(in);
   if (c == EOF) {
@@ -564,9 +564,10 @@ static char *table_read_line(FILE *in) {
       size_t new_cap = cap * 2;
       char *new_buf = (char *)realloc(buf, new_cap);
       if (!new_buf) {
+        // GCOVR_EXCL_START
         free(buf);
         return NULL;
-      }
+      } // GCOVR_EXCL_STOP
       buf = new_buf;
       cap = new_cap;
     }
