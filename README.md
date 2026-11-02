@@ -12,6 +12,8 @@ TODO: Are there any known issues?
 
 TODO: Describe your experience with the project (struggles, breakthroughs, etc.).
 
+## AI Fixes Note
+
 ## Analysis
 
 TODO: Provide your analysis of the results. If the assignment does not require

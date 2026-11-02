@@ -23,12 +23,16 @@
 #define RESET   "\x1b[0m"
 
 void setUp(void) {
-  printf("Setting up tests...\n");
+  //printf("Setting up tests...\n");
 }
 
 void tearDown(void) {
-  printf("Tearing down tests...\n");
+  //printf("Tearing down tests...\n");
 }
+
+//--------------------------------//
+//     Test Helper Methods        //
+//--------------------------------//
 
 /**
  * @brief Helper to construct an IPv4 address in host byte order.
@@ -51,7 +55,7 @@ static inline cidr_t make_cidr(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8
 //      Task 1 Method Tests       //
 //--------------------------------//
 
-// Note: I wrote these task 1 tests before using AI
+// Note: I wrote these task 1 tests before using AI, I neglected the boundary cases which Gemini added.
 
 void ip_parse_functionality_test(void) {
   //Initialize Data for the tests
@@ -273,16 +277,40 @@ void cidr_format_functionality_test(void) {
 //      Task 2 Method Tests       //
 //--------------------------------//
 
-void cidr_mask_test(void) {
+void cidr_mask_functionality_test(void) {
   // /0 must be 0 (no bits set; avoiding UB shift by 32)
   TEST_ASSERT_EQUAL_HEX32(0x00000000, cidr_mask(0));
 
   // Representative prefix lengths
   TEST_ASSERT_EQUAL_HEX32(0x80000000, cidr_mask(1));
+  TEST_ASSERT_EQUAL_HEX32(0xC0000000, cidr_mask(2));
+  TEST_ASSERT_EQUAL_HEX32(0xE0000000, cidr_mask(3));
+  TEST_ASSERT_EQUAL_HEX32(0xF0000000, cidr_mask(4));
+  TEST_ASSERT_EQUAL_HEX32(0xF8000000, cidr_mask(5));
+  TEST_ASSERT_EQUAL_HEX32(0xFC000000, cidr_mask(6));
+  TEST_ASSERT_EQUAL_HEX32(0xFE000000, cidr_mask(7));
   TEST_ASSERT_EQUAL_HEX32(0xFF000000, cidr_mask(8));
+  TEST_ASSERT_EQUAL_HEX32(0xFF800000, cidr_mask(9));
+  TEST_ASSERT_EQUAL_HEX32(0xFFC00000, cidr_mask(10));
+  TEST_ASSERT_EQUAL_HEX32(0xFFE00000, cidr_mask(11));
+  TEST_ASSERT_EQUAL_HEX32(0xFFF00000, cidr_mask(12));
+  TEST_ASSERT_EQUAL_HEX32(0xFFF80000, cidr_mask(13));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFC0000, cidr_mask(14));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFE0000, cidr_mask(15));
   TEST_ASSERT_EQUAL_HEX32(0xFFFF0000, cidr_mask(16));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFF8000, cidr_mask(17));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFC000, cidr_mask(18));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFE000, cidr_mask(19));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFF000, cidr_mask(20));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFF800, cidr_mask(21));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFC00, cidr_mask(22));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFE00, cidr_mask(23));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFF00, cidr_mask(24));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFF80, cidr_mask(25));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFC0, cidr_mask(26));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFE0, cidr_mask(27));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFF0, cidr_mask(28));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFF8, cidr_mask(29));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFC, cidr_mask(30));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFE, cidr_mask(31));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFF, cidr_mask(32));
@@ -598,6 +626,10 @@ void table_lookup_functionality_test(void) {
 
 }
 
+//--------------------------------//
+//      Test Runner Main          //
+//--------------------------------//
+
 int main(void) {
   UNITY_BEGIN();
   printf(BLUE "\n\nRunning Tests for Project 3 CS425\n" RESET);
@@ -611,7 +643,7 @@ int main(void) {
   printf(YELLOW "-----------------------------------\n" RESET);
   printf(CYAN "Running Task 2 Method tests...\n" RESET);
   printf(YELLOW "-----------------------------------\n" RESET);
-  RUN_TEST(cidr_mask_test);
+  RUN_TEST(cidr_mask_functionality_test);
   RUN_TEST(cidr_network_functionality_test);
   RUN_TEST(cidr_broadcast_functionality_test);
   RUN_TEST(cidr_first_host_functionality_test);

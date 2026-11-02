@@ -1,14 +1,15 @@
 # CS425 Project 3 - Chat Session History
 
-**Date:** 2026-10-30  
 **Project:** CS425 Project 3 (IPv4 & CIDR Utilities)  
 **Workspace:** `C:\Users\lunar\OneDrive\Documents\School\Archive\CS425\cs425-p3`  
+**Last Updated:** 2026-11-01  
 
 ---
 
 ## Session Overview & Requirements
 
-- **Task Scope:** Implement Task 1 methods in `src/lab.c` according to `src/lab.h` specifications.
+- **Task 1 Scope:** Address parsing and formatting in `src/lab.c` according to `src/lab.h` specifications (`ip_parse`, `ip_format`, `cidr_parse`, `cidr_format`).
+- **Task 2 Scope:** Subnet arithmetic in `src/lab.c` (`cidr_mask`, `cidr_network`, `cidr_broadcast`, `cidr_first_host`, `cidr_last_host`, `cidr_host_count`, `cidr_contains`, `cidr_is_network`, `cidr_subnet`).
 - **Specification Source of Truth:** `src/lab.h` overrides tests if inconsistencies exist.
 - **Parsing Strategy:**
   - For IPv4: Split on `.` and verify each of the 4 octets satisfies all constraints (0–255, decimal digits only, no leading zeros like `"010"`, no extra characters).
@@ -41,7 +42,7 @@
 
 #### Actions Taken:
 - Verified MinGW `gcc` (v16.1.0) and GNU `make` (v4.4.1) directly in Windows PowerShell.
-- Configured PATH to use Git's Unix utilities (`find`, `mkdir`) so that Makefile shell targets work seamlessly on Windows.
+- Configured PATH to use Git's Unix utilities (`find`, `mkdir`) so that Makefile shell targets work seamlessly on Windows without WSL.
 
 ---
 
@@ -95,4 +96,90 @@
 > *how do I get you to save the chat history in a md*
 
 #### Actions Taken:
-- Saved this comprehensive session record to `chat_history.md`.
+- Created and saved the initial conversation record to `chat_history.md`.
+- Explained how to prompt the assistant to update or create markdown transcripts.
+
+---
+
+### User Request 7
+> *Now we are working on task 2. Using the src/lab.h descriptions to write the tests in tests/lab-test.c*  
+> *The descriptions detail the accpetance criteria of the method*
+
+#### Actions Taken:
+- Added `make_ip` and `make_cidr` helper functions in `tests/lab-test.c`.
+- Implemented comprehensive unit tests for all 9 Task 2 methods according to the acceptance criteria in `src/lab.h`:
+  1. `cidr_mask_test`:
+     - `/0` returns `0x00000000` (avoids shift-by-32 UB).
+     - Prefix lengths: `/1`, `/8`, `/16`, `/24` (`255.255.255.0`), `/25`, `/30`, `/31`, `/32` (`255.255.255.255`).
+     - Prefixes $> 32$ clamp to `32` (`0xFFFFFFFF`).
+  2. `cidr_network_functionality_test`:
+     - Clears host bits (`addr & mask`): Onyx `/25` example (`132.178.227.11/25` $\to$ `132.178.227.0`), `/24`, `/0` $\to$ `0.0.0.0`, `/31`, `/32`, prefix $> 32$.
+  3. `cidr_broadcast_functionality_test`:
+     - Sets host bits (`addr | ~mask`): Onyx `/25` (`132.178.227.127`), `/24`, `/0` $\to$ `255.255.255.255`, `/31`, `/32`, prefix $> 32$.
+  4. `cidr_first_host_functionality_test`:
+     - `/0` to `/30`: `network + 1`.
+     - `/31` (RFC 3021) and `/32`: First host is the network address itself.
+  5. `cidr_last_host_functionality_test`:
+     - `/0` to `/30`: `broadcast - 1`.
+     - `/31` and `/32`: Last host is the broadcast address itself.
+  6. `cidr_host_count_functionality_test`:
+     - `/0` to `/30`: $2^{32 - \text{prefix}} - 2$ (e.g. `/25` $\to$ 126, `/24` $\to$ 254).
+     - `/31`: 2 hosts.
+     - `/32` & prefix $> 32$: 1 host.
+     - `/0`: $2^{32} - 2 = 4,294,967,294$ (64-bit `uint64_t` calculation).
+  7. `cidr_contains_functionality_test`:
+     - Evaluates `(addr & mask) == (network & mask)`.
+     - Validates Onyx example (.50 yes, .200 no, network and broadcast inside, next subnet outside).
+     - `/0` contains all; `/32` contains exact match only.
+  8. `cidr_is_network_functionality_test`:
+     - Checks that all host bits are zero (`(addr & ~mask) == 0`).
+     - Rejects host addresses (e.g., `192.168.1.5/24` $\to$ false).
+     - Validates `/0` (only `0.0.0.0/0` is network; non-zero `/0` is not), `/31`, `/32`.
+  9. `cidr_subnet_functionality_test`:
+     - Splitting `/24` into $n=4$ subnets produces `/26` blocks.
+     - $n=1$ returns block unchanged.
+     - Splitting `/0` into $n=2$ produces `0.0.0.0/1` and `128.0.0.0/1`.
+     - Rejection cases leaving `out` untouched: `out == NULL`, non-network block, $n=0$, non-power-of-two $n$, $i \ge n$, prefix $> 32$.
+
+---
+
+### User Request 8
+> *I will go over the tests then have you write the associated methods*
+
+#### Assistant Response:
+- Provided an acceptance criteria breakdown of all 9 Task 2 methods and their corresponding test coverage in `tests/lab-test.c`.
+
+---
+
+### User Request 9
+> *now that the task 2 tests are written and reviewed, implement the task 2 methods in lab.c based on the expected behavior from the tests*
+
+#### Actions Taken:
+1. Implemented all 9 Task 2 methods in `src/lab.c`:
+   - `cidr_mask`: Guarded against undefined behavior when shifting 32 bits (`prefix == 0` returns 0; `prefix >= 32` returns `0xFFFFFFFFU`; else `0xFFFFFFFFU << (32 - prefix)`).
+   - `cidr_network`: `block.addr & cidr_mask(block.prefix)`.
+   - `cidr_broadcast`: `block.addr | ~cidr_mask(block.prefix)`.
+   - `cidr_first_host`: `block.prefix >= 31 ? net : net + 1`.
+   - `cidr_last_host`: `block.prefix >= 31 ? bcast : bcast - 1`.
+   - `cidr_host_count`: 64-bit math for `/0` (`(1ULL << 32) - 2`), 2 for `/31`, 1 for `block.prefix >= 32`.
+   - `cidr_contains`: `(addr & mask) == (block.addr & mask)`.
+   - `cidr_is_network`: `(block.addr & ~mask) == 0`.
+   - `cidr_subnet`: Validates `out != NULL`, `cidr_is_network(block)`, $n > 0$, power-of-two $n$, $i < n$, and new prefix $\le 32$. Computes $i$-th subnet address cleanly without 32-bit shift overflow.
+2. Rebuilt and executed unit tests:
+   ```powershell
+   make clean; make test
+   ./build/tests/myapp_t
+   ```
+3. Test Results:
+   - **Task 1 tests: 4 passed**
+   - **Task 2 tests: 9 passed**
+   - **Task 3 tests (stubs): 7 passed**
+   - **Total: 20 Tests, 0 Failures, 0 Ignored (All Passed)**.
+
+---
+
+### User Request 10
+> *Perserve the whole chat history in that document*
+
+#### Actions Taken:
+- Updated `chat_history.md` with the complete, consolidated transcript of all interactions, code changes, design decisions, and test outputs.

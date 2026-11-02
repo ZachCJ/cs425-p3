@@ -213,20 +213,23 @@ void cidr_format(cidr_t block, char out[CIDR_STR_LEN]) {
  * @return The mask, host byte order.
  */
 uint32_t cidr_mask(uint8_t prefix) {
-  (void)prefix;
-  return 0;
+  if (prefix == 0) {
+    return 0;
+  }
+  if (prefix >= 32) {
+    return 0xFFFFFFFFU;
+  }
+  return 0xFFFFFFFFU << (32 - prefix);
 }
 
 /** @brief The lowest address in the block: the address with the host bits cleared. */
 uint32_t cidr_network(cidr_t block) {
-  (void)block;
-  return 0;
+  return block.addr & cidr_mask(block.prefix);
 }
 
 /** @brief The highest address in the block: the address with the host bits set. */
 uint32_t cidr_broadcast(cidr_t block) {
-  (void)block;
-  return 0;
+  return block.addr | ~cidr_mask(block.prefix);
 }
 
 /**
@@ -234,8 +237,11 @@ uint32_t cidr_broadcast(cidr_t block) {
  *
  */
 uint32_t cidr_first_host(cidr_t block) {
-  (void)block;
-  return 0;
+  uint32_t net = cidr_network(block);
+  if (block.prefix >= 31) {
+    return net;
+  }
+  return net + 1;
 }
 
 /**
@@ -243,8 +249,11 @@ uint32_t cidr_first_host(cidr_t block) {
  *
  */
 uint32_t cidr_last_host(cidr_t block) {
-  (void)block;
-  return 0;
+  uint32_t bcast = cidr_broadcast(block);
+  if (block.prefix >= 31) {
+    return bcast;
+  }
+  return bcast - 1;
 }
 
 /**
@@ -252,21 +261,25 @@ uint32_t cidr_last_host(cidr_t block) {
  *
  */
 uint64_t cidr_host_count(cidr_t block) {
-  (void)block;
-  return 0;
+  if (block.prefix >= 32) {
+    return 1;
+  }
+  if (block.prefix == 31) {
+    return 2;
+  }
+  return (1ULL << (32 - block.prefix)) - 2;
 }
 
 /** @brief true if addr falls inside the block. */
 bool cidr_contains(cidr_t block, uint32_t addr) {
-  (void)block;
-  (void)addr;
-  return false;
+  uint32_t mask = cidr_mask(block.prefix);
+  return (addr & mask) == (block.addr & mask);
 }
 
 /** @brief true if the block's host bits are all zero, so it names a network. */
 bool cidr_is_network(cidr_t block) {
-  (void)block;
-  return false;
+  uint32_t mask = cidr_mask(block.prefix);
+  return (block.addr & ~mask) == 0;
 }
 
 /**
@@ -281,11 +294,41 @@ bool cidr_is_network(cidr_t block) {
  *         range.
  */
 bool cidr_subnet(cidr_t block, uint32_t n, uint32_t i, cidr_t *out) {
-  (void)block;
-  (void)n;
-  (void)i;
-  (void)out;
-  return false;
+  if (!out || !cidr_is_network(block) || n == 0) {
+    return false;
+  }
+
+  // n must be a power of two
+  if ((n & (n - 1)) != 0) {
+    return false;
+  }
+
+  // i must be in range 0 to n - 1
+  if (i >= n) {
+    return false;
+  }
+
+  // Determine number of borrowed bits k = log2(n)
+  uint32_t temp = n;
+  uint8_t k = 0;
+  while (temp > 1) {
+    temp >>= 1;
+    k++;
+  }
+
+  uint32_t new_prefix = (uint32_t)block.prefix + k;
+  if (new_prefix > 32) {
+    return false;
+  }
+
+  uint32_t addr = block.addr;
+  if (new_prefix > 0) {
+    addr += (i << (32 - new_prefix));
+  }
+
+  out->addr = addr;
+  out->prefix = (uint8_t)new_prefix;
+  return true;
 }
 
 /* ------------------------------------------------------------------------
