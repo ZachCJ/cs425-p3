@@ -1,7 +1,7 @@
 # Project 3
 
 - Name: Zachary Johnston
-- Email: <zacharyjohnston324@u.boisestate.edu>
+- Email: zacharyjohnston324@u.boisestate.edu
 - Class: C425-001
 
 ## Known Bugs or Issues
