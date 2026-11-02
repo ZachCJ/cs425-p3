@@ -1,6 +1,6 @@
 # Submission Report
 
-- Submission generated at 11/02/2026 at 18:48:08
+- Submission generated at 11/02/2026 at 18:55:27
 
 - Machine info: Linux runnervm48cm3 7.0.0-1017-azure #17~24.04.1-Ubuntu SMP PREEMPT Thu Sep 24 18:46:57 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
@@ -20,7 +20,7 @@ Post any questions on the class discussion board for help.
 # Project 3
 
 - Name: Zachary Johnston
-- Email: <zacharyjohnston324@u.boisestate.edu>
+- Email: zacharyjohnston324@u.boisestate.edu
 - Class: C425-001
 
 ## Known Bugs or Issues
@@ -2657,14 +2657,14 @@ int main(void) {
 ```
 
 ## Scripts Files
-Report generated on 11/02/2026 at 18:48:10
+Report generated on 11/02/2026 at 18:55:29
 
 
 ---
 
 ## End of Report
 
-SHA-256 Hash of the report: faf84b90bd4ba9ae63e9a70ba53ff8bec0c6a0fb403764f07fc6dbbb0ff7a471
+SHA-256 Hash of the report: 45658b8215a4011f4558ff49e8088cb5441bbbbb5b120068b16442f26d4139b6
 
 Do not edit the generated report. Any changes will be reported as academic dishonesty
 
