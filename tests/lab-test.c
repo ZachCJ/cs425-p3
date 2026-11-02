@@ -51,13 +51,13 @@ static inline cidr_t make_cidr(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8
 /**
  * @brief Helper to construct a route_t struct.
  */
-static inline route_t make_route(cidr_t dest, uint32_t gateway, const char *dev) {
-  route_t r;
-  r.dest = dest;
-  r.gateway = gateway;
-  memset(r.dev, 0, sizeof(r.dev));
+static inline route_t * make_route(cidr_t dest, uint32_t gateway, const char *dev) {
+  // GCOVR_EXCL_START
+  route_t *r = (route_t *)malloc(sizeof(route_t)); //GCOVR_EXCL_STOP
+  r->dest = dest;
+  r->gateway = gateway;
   if (dev) {
-    strncpy(r.dev, dev, sizeof(r.dev) - 1);
+    strncpy(r->dev, dev, sizeof(r->dev) - 1);
   }
   return r;
 }
@@ -600,83 +600,82 @@ void cidr_subnet_functionality_test(void) {
 //--------------------------------//
 
 void route_parse_functionality_test(void) {
-  route_t r;
-  memset(&r, 0, sizeof(r));
+  route_t *r = (route_t *)malloc(sizeof(route_t));
 
   // Valid route: regular CIDR with dotted IP gateway
-  TEST_ASSERT_TRUE(route_parse("10.0.0.0/8 10.1.0.1 eth1", &r));
-  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 0, 0, 0), r.dest.addr);
-  TEST_ASSERT_EQUAL_UINT8(8, r.dest.prefix);
-  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 1, 0, 1), r.gateway);
-  TEST_ASSERT_EQUAL_STRING("eth1", r.dev);
+  TEST_ASSERT_TRUE(route_parse("10.0.0.0/8 10.1.0.1 eth1", r));
+  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 0, 0, 0), r->dest.addr);
+  TEST_ASSERT_EQUAL_UINT8(8, r->dest.prefix);
+  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 1, 0, 1), r->gateway);
+  TEST_ASSERT_EQUAL_STRING("eth1", r->dev);
 
   // Valid route: "default" destination -> 0.0.0.0/0
-  TEST_ASSERT_TRUE(route_parse("default 132.178.227.1 eno1", &r));
-  TEST_ASSERT_EQUAL_UINT32(0, r.dest.addr);
-  TEST_ASSERT_EQUAL_UINT8(0, r.dest.prefix);
-  TEST_ASSERT_EQUAL_UINT32(make_ip(132, 178, 227, 1), r.gateway);
-  TEST_ASSERT_EQUAL_STRING("eno1", r.dev);
+  TEST_ASSERT_TRUE(route_parse("default 132.178.227.1 eno1", r));
+  TEST_ASSERT_EQUAL_UINT32(0, r->dest.addr);
+  TEST_ASSERT_EQUAL_UINT8(0, r->dest.prefix);
+  TEST_ASSERT_EQUAL_UINT32(make_ip(132, 178, 227, 1), r->gateway);
+  TEST_ASSERT_EQUAL_STRING("eno1", r->dev);
 
   // Valid route: "direct" gateway -> 0
-  TEST_ASSERT_TRUE(route_parse("132.178.227.0/25 direct eno1", &r));
-  TEST_ASSERT_EQUAL_UINT32(make_ip(132, 178, 227, 0), r.dest.addr);
-  TEST_ASSERT_EQUAL_UINT8(25, r.dest.prefix);
-  TEST_ASSERT_EQUAL_UINT32(0, r.gateway);
-  TEST_ASSERT_EQUAL_STRING("eno1", r.dev);
+  TEST_ASSERT_TRUE(route_parse("132.178.227.0/25 direct eno1", r));
+  TEST_ASSERT_EQUAL_UINT32(make_ip(132, 178, 227, 0), r->dest.addr);
+  TEST_ASSERT_EQUAL_UINT8(25, r->dest.prefix);
+  TEST_ASSERT_EQUAL_UINT32(0, r->gateway);
+  TEST_ASSERT_EQUAL_STRING("eno1", r->dev);
 
   // Valid route: "default" with "direct"
-  TEST_ASSERT_TRUE(route_parse("default direct eth0", &r));
-  TEST_ASSERT_EQUAL_UINT32(0, r.dest.addr);
-  TEST_ASSERT_EQUAL_UINT8(0, r.dest.prefix);
-  TEST_ASSERT_EQUAL_UINT32(0, r.gateway);
-  TEST_ASSERT_EQUAL_STRING("eth0", r.dev);
+  TEST_ASSERT_TRUE(route_parse("default direct eth0", r));
+  TEST_ASSERT_EQUAL_UINT32(0, r->dest.addr);
+  TEST_ASSERT_EQUAL_UINT8(0, r->dest.prefix);
+  TEST_ASSERT_EQUAL_UINT32(0, r->gateway);
+  TEST_ASSERT_EQUAL_STRING("eth0", r->dev);
 
   // Valid route: leading/trailing whitespace, multiple spaces and tabs, trailing newline
-  TEST_ASSERT_TRUE(route_parse(" \t 192.168.0.0/16 \t\t 10.1.0.1 \t eth1 \r\n", &r));
-  TEST_ASSERT_EQUAL_UINT32(make_ip(192, 168, 0, 0), r.dest.addr);
-  TEST_ASSERT_EQUAL_UINT8(16, r.dest.prefix);
-  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 1, 0, 1), r.gateway);
-  TEST_ASSERT_EQUAL_STRING("eth1", r.dev);
+  TEST_ASSERT_TRUE(route_parse(" \t 192.168.0.0/16 \t\t 10.1.0.1 \t eth1 \r\n", r));
+  TEST_ASSERT_EQUAL_UINT32(make_ip(192, 168, 0, 0), r->dest.addr);
+  TEST_ASSERT_EQUAL_UINT8(16, r->dest.prefix);
+  TEST_ASSERT_EQUAL_UINT32(make_ip(10, 1, 0, 1), r->gateway);
+  TEST_ASSERT_EQUAL_STRING("eth1", r->dev);
 
   // Valid route: maximum device name length (DEV_NAME_LEN - 1 = 15 chars)
-  TEST_ASSERT_TRUE(route_parse("10.0.0.0/8 direct 123456789012345", &r));
-  TEST_ASSERT_EQUAL_STRING("123456789012345", r.dev);
+  TEST_ASSERT_TRUE(route_parse("10.0.0.0/8 direct 123456789012345", r));
+  TEST_ASSERT_EQUAL_STRING("123456789012345", r->dev);
 
   // Failure cases: r must remain untouched on failure!
-  route_t sentinel = make_route(make_cidr(99, 99, 99, 99, 99), 0x12345678, "sentinel");
+  route_t * sentinel = make_route(make_cidr(99, 99, 99, 99, 99), 0x12345678, "sentinel");
   r = sentinel;
 
-  // 1. NULL arguments
-  TEST_ASSERT_FALSE(route_parse(NULL, &r));
-  TEST_ASSERT_EQUAL_UINT32(sentinel.dest.addr, r.dest.addr);
+  // 1. NULL arguments (Safety Check)
+  TEST_ASSERT_FALSE(route_parse(NULL, r));
+  TEST_ASSERT_EQUAL_UINT32(sentinel->dest.addr, r->dest.addr);
   TEST_ASSERT_FALSE(route_parse("default direct eth0", NULL));
 
   // 2. Destination has host bits set
-  TEST_ASSERT_FALSE(route_parse("192.168.1.5/24 direct eth0", &r));
-  TEST_ASSERT_EQUAL_UINT32(sentinel.dest.addr, r.dest.addr);
-  TEST_ASSERT_FALSE(route_parse("132.178.227.11/25 10.1.0.1 eth0", &r));
-  TEST_ASSERT_EQUAL_UINT32(sentinel.dest.addr, r.dest.addr);
+  TEST_ASSERT_FALSE(route_parse("192.168.1.5/24 direct eth0", r));
+  TEST_ASSERT_EQUAL_UINT32(sentinel->dest.addr, r->dest.addr);
+  TEST_ASSERT_FALSE(route_parse("132.178.227.11/25 10.1.0.1 eth0", r));
+  TEST_ASSERT_EQUAL_UINT32(sentinel->dest.addr, r->dest.addr);
 
   // 3. Malformed destination
-  TEST_ASSERT_FALSE(route_parse("10.0.0/8 direct eth0", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/33 direct eth0", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0 direct eth0", &r));
-  TEST_ASSERT_FALSE(route_parse("defaul direct eth0", &r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0/8 direct eth0", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/33 direct eth0", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0 direct eth0", r));
+  TEST_ASSERT_FALSE(route_parse("defaul direct eth0", r));
 
   // 4. Malformed gateway
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 10.1.0 eth1", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 256.1.1.1 eth1", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 010.0.0.1 eth1", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 indirectly eth1", &r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 10.1.0 eth1", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 256.1.1.1 eth1", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 010.0.0.1 eth1", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 indirectly eth1", r));
 
   // 5. Invalid device: empty or too long (>= DEV_NAME_LEN chars)
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct", &r));
-  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct 1234567890123456", &r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct", r));
+  TEST_ASSERT_FALSE(route_parse("10.0.0.0/8 direct 1234567890123456", r));
 
   // 6. Extra fields / comments not stripped by route_parse
-  TEST_ASSERT_FALSE(route_parse("default direct eth0 extra", &r));
-  TEST_ASSERT_FALSE(route_parse("default direct eth0 # comment", &r));
-  TEST_ASSERT_FALSE(route_parse("", &r));
+  TEST_ASSERT_FALSE(route_parse("default direct eth0 extra", r));
+  TEST_ASSERT_FALSE(route_parse("default direct eth0 # comment", r));
+  TEST_ASSERT_FALSE(route_parse("", r));
 }
 
 void table_create_functionality_test(void) {
@@ -697,8 +696,8 @@ void table_destroy_functionality_test(void) {
 
   // Populated table destroy
   table = table_create();
-  route_t r = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
-  table_add(table, &r);
+  route_t * r = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
+  table_add(table, r);
   table_destroy(table);
 }
 
@@ -709,18 +708,20 @@ void table_count_functionality_test(void) {
   fwd_table_t *table = table_create();
   TEST_ASSERT_EQUAL_size_t(0, table_count(table));
 
-  route_t r1 = make_route(make_cidr(0, 0, 0, 0, 0), make_ip(132, 178, 227, 1), "eno1");
-  TEST_ASSERT_TRUE(table_add(table, &r1));
+  route_t * r1 = make_route(make_cidr(0, 0, 0, 0, 0), make_ip(132, 178, 227, 1), "eno1");
+  TEST_ASSERT_TRUE(table_add(table, r1));
   TEST_ASSERT_EQUAL_size_t(1, table_count(table));
 
-  route_t r2 = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
-  TEST_ASSERT_TRUE(table_add(table, &r2));
+  route_t * r2 = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
+  TEST_ASSERT_TRUE(table_add(table, r2));
   TEST_ASSERT_EQUAL_size_t(2, table_count(table));
 
   // Failed add does not increment count
-  TEST_ASSERT_FALSE(table_add(table, &r2)); // duplicate
+  TEST_ASSERT_FALSE(table_add(table, r2)); // duplicate
   TEST_ASSERT_EQUAL_size_t(2, table_count(table));
 
+  free(r1);
+  free(r2);
   table_destroy(table);
 }
 
@@ -729,37 +730,37 @@ void table_add_functionality_test(void) {
   TEST_ASSERT_NOT_NULL(table);
 
   // Add valid route
-  route_t r1 = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
-  TEST_ASSERT_TRUE(table_add(table, &r1));
+  route_t * r1 = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
+  TEST_ASSERT_TRUE(table_add(table, r1));
   TEST_ASSERT_EQUAL_size_t(1, table_count(table));
 
   // Add another route
-  route_t r2 = make_route(make_cidr(10, 1, 0, 0, 16), 0, "eth1");
-  TEST_ASSERT_TRUE(table_add(table, &r2));
+  route_t * r2 = make_route(make_cidr(10, 1, 0, 0, 16), 0, "eth1");
+  TEST_ASSERT_TRUE(table_add(table, r2));
   TEST_ASSERT_EQUAL_size_t(2, table_count(table));
 
   // Add default route
-  route_t rdef = make_route(make_cidr(0, 0, 0, 0, 0), make_ip(132, 178, 227, 1), "eno1");
-  TEST_ASSERT_TRUE(table_add(table, &rdef));
+  route_t * rdef = make_route(make_cidr(0, 0, 0, 0, 0), make_ip(132, 178, 227, 1), "eno1");
+  TEST_ASSERT_TRUE(table_add(table, rdef));
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
   // Failure: duplicate destination block (even with different gateway or device)
-  route_t r_dup = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 2, 0, 1), "eth2");
-  TEST_ASSERT_FALSE(table_add(table, &r_dup));
+  route_t * r_dup = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 2, 0, 1), "eth2");
+  TEST_ASSERT_FALSE(table_add(table, r_dup));
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
   // Failure: duplicate default route
-  route_t rdef_dup = make_route(make_cidr(0, 0, 0, 0, 0), 0, "eth0");
-  TEST_ASSERT_FALSE(table_add(table, &rdef_dup));
+  route_t * rdef_dup = make_route(make_cidr(0, 0, 0, 0, 0), 0, "eth0");
+  TEST_ASSERT_FALSE(table_add(table, rdef_dup));
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
   // Failure: destination has host bits set
-  route_t r_hostbits = make_route(make_cidr(192, 168, 1, 5, 24), 0, "eth0");
-  TEST_ASSERT_FALSE(table_add(table, &r_hostbits));
+  route_t * r_hostbits = make_route(make_cidr(192, 168, 1, 5, 24), 0, "eth0");
+  TEST_ASSERT_FALSE(table_add(table, r_hostbits));
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
   // Failure: NULL arguments
-  TEST_ASSERT_FALSE(table_add(NULL, &r1));
+  TEST_ASSERT_FALSE(table_add(NULL, r1));
   TEST_ASSERT_FALSE(table_add(table, NULL));
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
@@ -834,8 +835,8 @@ void table_lookup_functionality_test(void) {
   TEST_ASSERT_NULL(table_lookup(table, make_ip(10, 1, 2, 5)));
 
   // Table without default route: unmatched address returns NULL
-  route_t r_ten = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
-  table_add(table, &r_ten);
+  route_t * r_ten = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
+  table_add(table, r_ten);
   TEST_ASSERT_NULL(table_lookup(table, make_ip(192, 168, 1, 1)));
 
   // Match inside single route
@@ -855,7 +856,7 @@ void table_lookup_functionality_test(void) {
   // 10.1.2.128/25      10.1.2.1         eth2
   // 192.168.0.0/16     10.1.0.1         eth1
   table = table_create();
-  route_t routes[7] = {
+  route_t * routes[7] = {
     make_route(make_cidr(0, 0, 0, 0, 0), make_ip(132, 178, 227, 1), "eno1"),
     make_route(make_cidr(132, 178, 227, 0, 25), 0, "eno1"),
     make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1"),
@@ -865,7 +866,7 @@ void table_lookup_functionality_test(void) {
     make_route(make_cidr(192, 168, 0, 0, 16), make_ip(10, 1, 0, 1), "eth1")
   };
   for (int i = 0; i < 7; i++) {
-    table_add(table, &routes[i]);
+    table_add(table, routes[i]);
   }
 
   // 132.178.227.50 -> 132.178.227.0/25 dev eno1 direct
@@ -905,7 +906,7 @@ void table_lookup_functionality_test(void) {
   // Order independence test: add in reverse order
   fwd_table_t *rev_table = table_create();
   for (int i = 6; i >= 0; i--) {
-    table_add(rev_table, &routes[i]);
+    table_add(rev_table, routes[i]);
   }
   // Lookup 10.1.2.200 must still return /25 route
   match = table_lookup(rev_table, make_ip(10, 1, 2, 200));
