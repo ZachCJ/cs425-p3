@@ -276,3 +276,71 @@
    - **Task 3 tests: 7 passed**
    - **Total: 20 Tests, 0 Failures, 0 Ignored (All Passed)**.
    - **Coverage on `src/lab.c`:** 92.72% line coverage.
+
+---
+
+### User Request 13
+
+> *What is your understanding of task 4*
+
+#### Assistant Response:
+
+- Outlined the CLI command syntax (`info`, `split`, `lookup`, and 0-argument usage).
+- Detailed the exact 11-character column output specification for `info`.
+- Detailed power-of-two validation and network address constraints for `split`.
+- Detailed table loading, gateway vs. direct formatting, and `unreachable` behavior for `lookup`.
+- Detailed the exit code contract:
+  - `0`: Success (or no arguments).
+  - `1`: Invalid syntax, malformed address, or invalid split block/count.
+  - `2`: Table file cannot be opened or contains a bad route.
+  - `3`: At least one address is unreachable.
+  - Multi-error priority in `lookup`: Report every address; exit 1 if any address was malformed, otherwise 3 if any was unreachable.
+
+---
+
+### User Request 14
+
+> *Implement the program in main.c*
+
+#### Actions Taken:
+
+1. **Implemented CLI in `src/main.c`:**
+   - `print_usage`: Outputs standard usage syntax to specified `FILE *` (`stdout` or `stderr`).
+   - `handle_info`:
+     - Parses `<address>/<prefix>` using `cidr_parse`.
+     - Permissive of host bits (interface addresses).
+     - Prints 8 rows with exact 11-char column padding (`address`, `prefix`, `netmask`, `network`, `broadcast`, `first host`, `last host`, `hosts`).
+     - Exits 0 on success, 1 on malformed input.
+   - `handle_split`:
+     - Validates network block using `cidr_is_network` (refusing blocks with host bits set).
+     - Parses count, verifies digits-only, positive, power of two, and valid subnet prefix.
+     - Prints subnets in ascending order, one per line.
+     - Exits 0 on success, 1 on refusal/error.
+   - `handle_lookup`:
+     - Opens table file; reports error and exits 2 if file cannot be opened.
+     - Loads routes using `table_load`; on failure, reports `myapp: <file>:<line>: not a valid route` and exits 2.
+     - Iterates through all address arguments, performing `table_lookup`.
+     - Formats output per address (`<addr> dev <dev>`, `<addr> via <gw> dev <dev>`, or `<addr> unreachable`).
+     - Tracks error states across all arguments: exits 1 if any address was malformed, 3 if any was unreachable, 0 otherwise.
+     - Destroys forwarding table and frees resources on all paths.
+   - `main`:
+     - Dispatches commands.
+     - Invocation with no arguments prints usage and exits 0 (clean path for `make leak`).
+     - Unknown command or incorrect argument count prints error and usage to `stderr`, exiting 1.
+
+2. **Compilation Verification:**
+   - `make release`: Clean build under strict `-Wall -Wextra -O2 -fPIE -Wformat -Wformat=2 -Wconversion -Wsign-conversion -Wimplicit-fallthrough -fstack-protector-strong -Werror=format-security -Werror=implicit -Werror=incompatible-pointer-types -Werror=int-conversion`. Zero warnings.
+   - `make test`: Unit tests compiled and executed with 20/20 passing.
+
+3. **Behavioral Testing of All CLI Cases:**
+   - No arguments $\to$ Printed usage, exit code 0.
+   - `info 132.178.227.11/25` $\to$ Matched Assignment 4 Onyx output exactly, exit code 0.
+   - `split 192.168.1.0/24 4` $\to$ Printed 4 `/26` subnets, exit code 0.
+   - `split 192.168.1.5/24 4` $\to$ Refused split (host bits set), exit code 1.
+   - `split 192.168.1.0/24 3` $\to$ Refused split (non-power of two), exit code 1.
+   - `lookup` valid addresses $\to$ Matched expected `via` and `dev` routes, exit code 0.
+   - `lookup` with unmatched address $\to$ Printed `unreachable`, exit code 3.
+   - `lookup` with malformed address and unmatched address $\to$ Reported all, exit code 1.
+   - `lookup` non-existent file $\to$ Descriptive `stderr` message, exit code 2.
+   - `lookup` file with bad line $\to$ `myapp: <file>:4: not a valid route`, exit code 2.
+
