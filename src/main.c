@@ -6,9 +6,22 @@
 #define main main_exclude
 #endif
 
+bool parseCommandlineArguments(int argc,const char *argv[]) {
+    for(int i = 0; i < argc; i++) {
 
+    }
+}
 
-int main(int argc, char *argv[])
+/**
+ * 
+ * 
+ * Command Line Usage:  
+ *      myapp info <address>/<prefix>
+ *      myapp split <network>/<prefix> <count>
+ *      myapp lookup <table-file> <address>...
+ *      
+ */
+int main(int argc,const char *argv[])
 {
     return 0;
 }
