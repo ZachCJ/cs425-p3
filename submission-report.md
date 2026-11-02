@@ -1,6 +1,6 @@
 # Submission Report
 
-- Submission generated at 11/02/2026 at 18:55:27
+- Submission generated at 11/02/2026 at 19:02:41
 
 - Machine info: Linux runnervm48cm3 7.0.0-1017-azure #17~24.04.1-Ubuntu SMP PREEMPT Thu Sep 24 18:46:57 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
@@ -32,6 +32,7 @@ No bugs known to me at submission time.
 ### 1. /0 (Default Route / Entire IPv4 Address Space)
 
 - Netmask Avoidance of Undefined Behavior (cidr_mask):
+  
   - In C, bit-shifting a 32-bit integer by 32 bits (i.e. 0xFFFFFFFFU << (32 - 0)) is Undefined Behavior (UB) per C standard 6.5.7.
   - Handled with an explicit zero guard:
 
@@ -40,67 +41,78 @@ No bugs known to me at submission time.
         }
 
 - Network & Broadcast Addresses (cidr_network, cidr_broadcast):
+  
   - Network address: addr & 0 = 0.0.0.0.
   - Broadcast address: addr | ~0 = 255.255.255.255.
+
 - 64-bit Host Count (cidr_host_count):
-  - The standard host formula is 2^{32-prefix} - 2. For /0, 2³² = 4, 294, 967, 296, which overflows a standard 32-bit uint32_t
-      (UINT32_MAX is 4, 294, 967, 295).
+  
+  - The standard host formula is 2^{32-prefix} - 2. For /0, 2³² = 4, 294, 967, 296, which overflows a standard 32-bit uint32_t (UINT32_MAX is 4, 294, 967, 295).
   - Evaluated using 64-bit arithmetic:
 
         return (1ULL << (32 - block.prefix)) - 2; // Returns 4,294,967,294
 
 - First & Last Host (cidr_first_host, cidr_last_host):
+  
   - First host: 0.0.0.1 (network + 1).
   - Last host: 255.255.255.254 (broadcast - 1).
+
 - Routing & Containment (cidr_contains, table_lookup):
+
   - Evaluates (addr & 0) == (0 & 0), matching all IPv4 addresses. Because its prefix length is 0, any route with a prefix > 0 will win over it during longest prefix matching.
 
 ### 2. /31 (Point-to-Point Links — RFC 3021)
 
 - Netmask:
+
   - cidr_mask(31) returns 0xFFFFFFFE (255.255.255.254).
+
 - RFC 3021 Special Host Semantics:
-  - Traditional subnetting reserves 2 addresses (network and broadcast), which would leave 2 - 2 = 0 hosts. RFC 3021 defines point-
-      to-point links where both addresses are assigned to the two router interfaces:
-  - First Host: The network address itself (net).
-  - Last Host: The broadcast address itself (bcast).
 
-        uint32_t cidr_first_host(cidr_t block) {
-          uint32_t net = cidr_network(block);
-          if (block.prefix >= 31) {
-            return net;
+  - Traditional subnetting reserves 2 addresses (network and broadcast), which would leave 2 - 2 = 0 hosts. RFC 3021 defines point-to-point links where both addresses are assigned to the two router interfaces:
+
+    - First Host: The network address itself (net).
+    - Last Host: The broadcast address itself (bcast).
+
+          uint32_t cidr_first_host(cidr_t block) {
+            uint32_t net = cidr_network(block);
+            if (block.prefix >= 31) {
+              return net;
+            }
+            return net + 1;
           }
-          return net + 1;
-        }
 
-        uint32_t cidr_last_host(cidr_t block) {
-          uint32_t bcast = cidr_broadcast(block);
-          if (block.prefix >= 31) {
-            return bcast;
+          uint32_t cidr_last_host(cidr_t block) {
+            uint32_t bcast = cidr_broadcast(block);
+            if (block.prefix >= 31) {
+              return bcast;
+            }
+            return bcast - 1;
           }
-          return bcast - 1;
-        }
 
-  - Host Count: Exactly 2 hosts:
+    - Host Count: Exactly 2 hosts:
 
-        if (block.prefix == 31) {
-          return 2;
-        }
+          if (block.prefix == 31) {
+            return 2;
+          }
 
 ### 3. /32 (Single Host / Loopback)
 
 - Netmask:
+
   - cidr_mask(32) returns 0xFFFFFFFF (255.255.255.255). Any prefix > 32 is clamped to 32.
+
 - Single-Host Semantics:
+
   - Network and broadcast addresses are identical to the host address itself.
-  - First Host & Last Host: Equal to the address itself (shares the prefix >= 31 check with /31).
-  -1 Host Count: Exactly 1 host:
+  - First Host & Last Host: Equal to the address itself (shares the prefix >= 31 check with /31). -1 Host Count: Exactly 1 host:
 
         if (block.prefix >= 32) {
           return 1;
         }
 
 - Lookup:
+
   - Matches only the exact destination IP. In table_lookup, prefix 32 is the maximum possible prefix length and always wins when matched.
 
 ## Experience
@@ -2657,14 +2669,14 @@ int main(void) {
 ```
 
 ## Scripts Files
-Report generated on 11/02/2026 at 18:55:29
+Report generated on 11/02/2026 at 19:02:43
 
 
 ---
 
 ## End of Report
 
-SHA-256 Hash of the report: 45658b8215a4011f4558ff49e8088cb5441bbbbb5b120068b16442f26d4139b6
+SHA-256 Hash of the report: d941afb18e2a543635a26164f7a076fcba4dd0c9db046d0dcf522dd2c54418a9
 
 Do not edit the generated report. Any changes will be reported as academic dishonesty
 
