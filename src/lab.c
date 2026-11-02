@@ -335,6 +335,13 @@ bool cidr_subnet(cidr_t block, uint32_t n, uint32_t i, cidr_t *out) {
  * Task 3 - Longest prefix match
  * --------------------------------------------------------------------- */
 
+/** Internal structure for the forwarding table. */
+struct fwd_table {
+  route_t *routes;
+  size_t count;
+  size_t capacity;
+};
+
 /**
  * @brief Parse one line of a forwarding table file.
  *
@@ -343,9 +350,120 @@ bool cidr_subnet(cidr_t block, uint32_t n, uint32_t i, cidr_t *out) {
  * @return true if the line is a valid route, false otherwise (including NULL).
  */
 bool route_parse(const char *line, route_t *route) {
-  (void)line;
-  (void)route;
-  return false;
+  if (!line || !route) {
+    return false;
+  }
+
+  const char *p = line;
+
+  // 1. Skip leading whitespace
+  while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
+    p++;
+  }
+  if (*p == '\0') {
+    return false;
+  }
+
+  // 2. Field 1: Destination
+  const char *f1_start = p;
+  while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+    p++;
+  }
+  size_t f1_len = (size_t)(p - f1_start);
+
+  // Skip whitespace between field 1 and field 2
+  while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
+    p++;
+  }
+  if (*p == '\0') {
+    return false;
+  }
+
+  // 3. Field 2: Gateway
+  const char *f2_start = p;
+  while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+    p++;
+  }
+  size_t f2_len = (size_t)(p - f2_start);
+
+  // Skip whitespace between field 2 and field 3
+  while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
+    p++;
+  }
+  if (*p == '\0') {
+    return false;
+  }
+
+  // 4. Field 3: Device
+  const char *f3_start = p;
+  while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+    p++;
+  }
+  size_t f3_len = (size_t)(p - f3_start);
+
+  // Skip trailing whitespace
+  while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
+    p++;
+  }
+  if (*p != '\0') {
+    return false;
+  }
+
+  // Length sanity checks
+  char token1[64];
+  char token2[64];
+  char token3[64];
+
+  if (f1_len >= sizeof(token1) || f2_len >= sizeof(token2) || f3_len >= sizeof(token3)) {
+    return false;
+  }
+
+  memcpy(token1, f1_start, f1_len);
+  token1[f1_len] = '\0';
+
+  memcpy(token2, f2_start, f2_len);
+  token2[f2_len] = '\0';
+
+  memcpy(token3, f3_start, f3_len);
+  token3[f3_len] = '\0';
+
+  // Parse destination: either "default" (0.0.0.0/0) or CIDR block with no host bits set
+  cidr_t dest;
+  if (strcmp(token1, "default") == 0) {
+    dest.addr = 0;
+    dest.prefix = 0;
+  } else {
+    if (!cidr_parse(token1, &dest)) {
+      return false;
+    }
+    if (!cidr_is_network(dest)) {
+      return false;
+    }
+  }
+
+  // Parse gateway: either "direct" (0) or dotted quad IP
+  uint32_t gateway = 0;
+  if (strcmp(token2, "direct") == 0) {
+    gateway = 0;
+  } else {
+    if (!ip_parse(token2, &gateway)) {
+      return false;
+    }
+  }
+
+  // Device must be 1 to DEV_NAME_LEN - 1 characters
+  if (f3_len == 0 || f3_len >= DEV_NAME_LEN) {
+    return false;
+  }
+
+  // Success: write to route
+  route->dest = dest;
+  route->gateway = gateway;
+  memset(route->dev, 0, sizeof(route->dev));
+  memcpy(route->dev, token3, f3_len);
+  route->dev[f3_len] = '\0';
+
+  return true;
 }
 
 /**
@@ -354,18 +472,31 @@ bool route_parse(const char *line, route_t *route) {
  *         memory could not be allocated.
  */
 fwd_table_t *table_create(void) {
-  return NULL;
+  fwd_table_t *table = (fwd_table_t *)malloc(sizeof(fwd_table_t));
+  if (!table) {
+    return NULL;
+  }
+  table->routes = NULL;
+  table->count = 0;
+  table->capacity = 0;
+  return table;
 }
 
 /** @brief Free a table and everything in it. NULL is allowed and does nothing. */
 void table_destroy(fwd_table_t *table) {
-  (void)table;
+  if (!table) {
+    return;
+  }
+  free(table->routes);
+  free(table);
 }
 
 /** @brief The number of routes in the table; 0 for NULL. */
 size_t table_count(const fwd_table_t *table) {
-  (void)table;
-  return 0;
+  if (!table) {
+    return 0;
+  }
+  return table->count;
 }
 
 /**
@@ -375,9 +506,75 @@ size_t table_count(const fwd_table_t *table) {
  *         could not be allocated. The table is unchanged on failure.
  */
 bool table_add(fwd_table_t *table, const route_t *route) {
-  (void)table;
-  (void)route;
-  return false;
+  if (!table || !route) {
+    return false;
+  }
+
+  // Destination cannot have host bits set, and prefix cannot exceed 32
+  if (route->dest.prefix > 32 || !cidr_is_network(route->dest)) {
+    return false;
+  }
+
+  // Table cannot already hold a route to the same block
+  for (size_t idx = 0; idx < table->count; idx++) {
+    if (table->routes[idx].dest.addr == route->dest.addr &&
+        table->routes[idx].dest.prefix == route->dest.prefix) {
+      return false;
+    }
+  }
+
+  // Grow array if capacity reached
+  if (table->count >= table->capacity) {
+    size_t new_cap = table->capacity == 0 ? 8 : table->capacity * 2;
+    route_t *new_routes = (route_t *)realloc(table->routes, new_cap * sizeof(route_t));
+    if (!new_routes) {
+      return false;
+    }
+    table->routes = new_routes;
+    table->capacity = new_cap;
+  }
+
+  table->routes[table->count] = *route;
+  table->count++;
+  return true;
+}
+
+/**
+ * @brief Helper to read a line of arbitrary length from a file stream.
+ *
+ * @param in Open file stream.
+ * @return Heap-allocated string which caller must free, or NULL on EOF / error.
+ */
+static char *table_read_line(FILE *in) {
+  size_t cap = 128;
+  size_t len = 0;
+  char *buf = (char *)malloc(cap);
+  if (!buf) {
+    return NULL;
+  }
+
+  int c = fgetc(in);
+  if (c == EOF) {
+    free(buf);
+    return NULL;
+  }
+
+  while (c != EOF && c != '\n') {
+    if (len + 1 >= cap) {
+      size_t new_cap = cap * 2;
+      char *new_buf = (char *)realloc(buf, new_cap);
+      if (!new_buf) {
+        free(buf);
+        return NULL;
+      }
+      buf = new_buf;
+      cap = new_cap;
+    }
+    buf[len++] = (char)c;
+    c = fgetc(in);
+  }
+  buf[len] = '\0';
+  return buf;
 }
 
 /**
@@ -392,10 +589,58 @@ bool table_add(fwd_table_t *table, const route_t *route) {
  *         the bad one stay in the table.
  */
 bool table_load(fwd_table_t *table, FILE *in, size_t *bad_line) {
-  (void)table;
-  (void)in;
-  (void)bad_line;
-  return false;
+  if (!table || !in) {
+    if (bad_line) {
+      *bad_line = 0;
+    }
+    return false;
+  }
+
+  size_t line_num = 0;
+  char *line = NULL;
+
+  while ((line = table_read_line(in)) != NULL) {
+    line_num++;
+
+    // Everything from '#' to end of line is a comment
+    char *comment = strchr(line, '#');
+    if (comment) {
+      *comment = '\0';
+    }
+
+    // Check if line is blank once comment is removed
+    const char *p = line;
+    while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) {
+      p++;
+    }
+    if (*p == '\0') {
+      free(line);
+      continue;
+    }
+
+    // Parse route
+    route_t r;
+    if (!route_parse(line, &r)) {
+      free(line);
+      if (bad_line) {
+        *bad_line = line_num;
+      }
+      return false;
+    }
+
+    // Add route to table
+    if (!table_add(table, &r)) {
+      free(line);
+      if (bad_line) {
+        *bad_line = line_num;
+      }
+      return false;
+    }
+
+    free(line);
+  }
+
+  return true;
 }
 
 /**
@@ -406,7 +651,19 @@ bool table_load(fwd_table_t *table, FILE *in, size_t *bad_line) {
  *         route matches (or table is NULL).
  */
 const route_t *table_lookup(const fwd_table_t *table, uint32_t dest) {
-  (void)table;
-  (void)dest;
-  return NULL;
+  if (!table || table->count == 0) {
+    return NULL;
+  }
+
+  const route_t *best_match = NULL;
+
+  for (size_t idx = 0; idx < table->count; idx++) {
+    if (cidr_contains(table->routes[idx].dest, dest)) {
+      if (!best_match || table->routes[idx].dest.prefix > best_match->dest.prefix) {
+        best_match = &table->routes[idx];
+      }
+    }
+  }
+
+  return best_match;
 }

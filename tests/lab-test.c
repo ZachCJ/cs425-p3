@@ -643,6 +643,7 @@ void route_parse_functionality_test(void) {
 
   // Failure cases: r must remain untouched on failure!
   route_t * sentinel = make_route(make_cidr(99, 99, 99, 99, 99), 0x12345678, "sentinel");
+  free(r);
   r = sentinel;
 
   // 1. NULL arguments (Safety Check)
@@ -676,6 +677,8 @@ void route_parse_functionality_test(void) {
   TEST_ASSERT_FALSE(route_parse("default direct eth0 extra", r));
   TEST_ASSERT_FALSE(route_parse("default direct eth0 # comment", r));
   TEST_ASSERT_FALSE(route_parse("", r));
+
+  free(sentinel);
 }
 
 void table_create_functionality_test(void) {
@@ -699,6 +702,7 @@ void table_destroy_functionality_test(void) {
   route_t * r = make_route(make_cidr(10, 0, 0, 0, 8), make_ip(10, 1, 0, 1), "eth1");
   table_add(table, r);
   table_destroy(table);
+  free(r);
 }
 
 void table_count_functionality_test(void) {
@@ -765,6 +769,12 @@ void table_add_functionality_test(void) {
   TEST_ASSERT_EQUAL_size_t(3, table_count(table));
 
   table_destroy(table);
+  free(r1);
+  free(r2);
+  free(rdef);
+  free(r_dup);
+  free(rdef_dup);
+  free(r_hostbits);
 }
 
 void table_load_functionality_test(void) {
@@ -845,6 +855,7 @@ void table_lookup_functionality_test(void) {
   TEST_ASSERT_EQUAL_UINT32(make_ip(10, 0, 0, 0), match->dest.addr);
   TEST_ASSERT_EQUAL_STRING("eth1", match->dev);
   table_destroy(table);
+  free(r_ten);
 
   // Longest Prefix Match test (Canvas Assignment Onyx example)
   // Routes:
@@ -916,6 +927,9 @@ void table_lookup_functionality_test(void) {
   TEST_ASSERT_EQUAL_STRING("eth2", match->dev);
 
   table_destroy(rev_table);
+  for (int i = 0; i < 7; i++) {
+    free(routes[i]);
+  }
 }
 
 //--------------------------------//

@@ -225,3 +225,54 @@
    - `table_lookup_functionality_test`: Verifies NULL table returns NULL; table without default returns NULL for unmatched IPs; verifies longest prefix match using the Canvas assignment Onyx routing table (132.178.227.50 $\to$ /25, 8.8.8.8 $\to$ default /0, 10.1.2.5 $\to$ /24, 10.1.2.200 $\to$ /25); verifies order independence by adding routes in reverse order.
 2. Compiled with `make test` — 0 warnings, 0 errors.
 3. Left `src/lab.c` untouched as instructed.
+
+---
+
+### User Request 12
+
+> *I noticed that the make_route helper wasn't using malloc to allocate memory instead relying on the stack for the route_t structs. I fixed this because after the function returns that memory is not guarenteed to exist and can be overwritten resulting in odd behavior. With that fix in place now implement the task 3 functions*
+
+#### Actions Taken:
+
+1. **Reviewed Tester Memory Allocation:**
+   - Reviewed user commit (`87e24d4`) converting `make_route` in `tests/lab-test.c` to allocate `route_t *` on the heap with `malloc`.
+   - Verified and added corresponding `free()` calls in `route_parse_functionality_test`, `table_destroy_functionality_test`, `table_add_functionality_test`, and `table_lookup_functionality_test` to ensure test fixtures do not leak heap memory.
+
+2. **Implemented Task 3 Methods in `src/lab.c`:**
+   - `struct fwd_table`: Forwarding table representation using a dynamically resizable array of `route_t` structs (`routes`, `count`, `capacity`).
+   - `route_parse`:
+     - Parses exactly three whitespace-separated fields (`<destination> <gateway> <device>`).
+     - Supports `"default"` destination ($\to 0.0.0.0/0$) or CIDR block; validates that no host bits are set (`cidr_is_network`).
+     - Supports `"direct"` gateway ($\to 0$) or standard dotted-quad IPv4.
+     - Validates device name length between 1 and `DEV_NAME_LEN - 1` (15 characters max) and null-terminates safely.
+     - Rejects any extra tokens or comments, leaving the `route` argument untouched on failure.
+   - `table_create`: Allocates and initializes an empty table.
+   - `table_destroy`: Deallocates the internal routes buffer and the table structure (handles NULL safely).
+   - `table_count`: Returns current route count (or 0 for NULL).
+   - `table_add`:
+     - Validates destination block (`prefix <= 32` and `cidr_is_network`).
+     - Checks for duplicate destination networks (rejecting duplicates).
+     - Dynamically resizes the route array with exponential growth ($8 \to 16 \to 32 \dots$).
+     - Stores a copy of the route in the table.
+   - `table_read_line`: Static helper dynamically reading arbitrary length lines using `fgetc` and `realloc`.
+   - `table_load`:
+     - Strips comments starting at `#` to end of line.
+     - Skips empty / whitespace-only lines.
+     - On first failure (syntax error or duplicate route), records 1-based line number in `bad_line` and preserves all routes added prior to that line.
+     - Safely supports optional (NULL) `bad_line`.
+   - `table_lookup`:
+     - Finds the longest prefix match containing the destination IP (`cidr_contains`).
+     - Highest prefix length candidate selected; order-independent; returns pointer to route owned by table (or NULL).
+
+3. **Compiled and Executed Test Suite:**
+
+   ```powershell
+   $env:PATH = "C:\Program Files\Git\usr\bin;$env:PATH"; make clean; make test
+   ./build/tests/myapp_t
+   ```
+
+   - **Task 1 tests: 4 passed**
+   - **Task 2 tests: 9 passed**
+   - **Task 3 tests: 7 passed**
+   - **Total: 20 Tests, 0 Failures, 0 Ignored (All Passed)**.
+   - **Coverage on `src/lab.c`:** 92.72% line coverage.
